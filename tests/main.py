@@ -1,4 +1,5 @@
 import socket
+import time
 
 from src.sttcp.server import Server
 from src.sttcp.client import Client
@@ -23,7 +24,7 @@ def server_receive_handler(address: tuple, connection: socket.socket, data: byte
 
 
 @server.disconnection_handler
-def server_disconnection_handler(address: tuple):
+def server_disconnection_handler(address: tuple, reason: Exception):
     print(f'Disconnected by {":".join(map(str, address))}')
 
 
@@ -57,7 +58,7 @@ def client_response_handler(address: tuple, connection: socket.socket, data: byt
 
 
 @client.disconnection_handler
-def client_disconnection_handler(address: tuple):
+def client_disconnection_handler(address: tuple, reason: Exception):
     print(f'Disconnected from {":".join(map(str, address))}')
 
 
@@ -75,5 +76,6 @@ def client_universal_handler(handler_type: Server.HandlerType, address: tuple, c
 
 client.start()
 
+client.close()
 
 server.keep_alive()

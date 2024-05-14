@@ -1,13 +1,15 @@
 import socket
 import threading
+import traceback
 import warnings
 from enum import Enum
 from typing import Union
 from . import screen_lock
 
 
-def _default_connection(addr: tuple, connection: socket.socket):
+def _default_connection(addr: tuple, connection: socket.socket) -> Union[bool, None]:
     connection.sendall(b'ok')
+    return None
 
 
 def _default_response(addr: tuple, connection: socket.socket, data: bytes):
@@ -15,7 +17,7 @@ def _default_response(addr: tuple, connection: socket.socket, data: bytes):
     return False
 
 
-def _default_disconnection(addr: tuple):
+def _default_disconnection(addr: tuple, reason: Union[None, Exception]):
     pass
 
 
@@ -30,6 +32,9 @@ def _default_unconnected(addr: tuple, e: Exception):
 
 
 class Client:
+    class DestructionException(ConnectionAbortedError):
+        pass
+
     class HandlerType(Enum):
         connection = 1
         response = 2
@@ -59,6 +64,7 @@ class Client:
                 s.connect((self.host, self.port))
                 addr = s.getpeername()
 
+                disconnection_reason = None
                 data = None
                 while True:
                     screen_lock.acquire()
@@ -66,8 +72,26 @@ class Client:
                         continue_request_alt = self._universal_handler(self.HandlerType.connection, addr, s, None)
                         continue_request = self._connection_handler(addr, s)
                     else:
-                        continue_request_alt = self._universal_handler(self.HandlerType.response, addr, s, data)
-                        continue_request = self._response_handler(addr, s, data)
+                        if not self._socket_thread.shutdown:
+                            try:
+                                continue_request_alt = self._universal_handler(self.HandlerType.response, addr, s, data)
+                                continue_request = self._response_handler(addr, s, data)
+                            except (ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError,
+                                    ConnectionError, OSError) as e:
+                                disconnection_reason = e
+                                break
+                            except Exception as e:
+                                print('\033[91mOh no! Something went wrong in your handler! Check it out and find '
+                                      'problems:\033[0m')
+                                print(traceback.format_exc())
+                                print('\033[91mDisconnecting the client\033[0m')
+                                disconnection_reason = e
+                                s.close()
+                                break
+                        else:
+                            s.close()
+                            disconnection_reason = self.DestructionException('Connection closed!')
+                            break
 
                     if self.handler is not None:
                         self.handler(addr, s, data)
@@ -88,22 +112,28 @@ class Client:
 
                     if not data:
                         break
-
+                screen_lock.release()
                 screen_lock.acquire()
                 self._universal_handler(self.HandlerType.disconnection, addr, None, None)
-                self._disconnection_handler(addr)
+                self._disconnection_handler(addr, disconnection_reason)
                 screen_lock.release()
-            except (ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError, ConnectionError) as e:
+            except (ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError, ConnectionError, OSError) \
+                    as e:
                 screen_lock.acquire()
                 self._universal_handler(self.HandlerType.unconnected, None, None, None)
                 self._unconnected_handler((self.host, self.port), e)
                 screen_lock.release()
 
         self._socket_thread = threading.Thread(target=client)
+        self._socket_thread.shutdown = False
 
     def start(self):
         """Starts TCP client"""
         self._socket_thread.start()
+
+    def close(self):
+        """Closes TCP client"""
+        self._socket_thread.shutdown = True
 
     def connection_handler(self, function) -> None:
         """

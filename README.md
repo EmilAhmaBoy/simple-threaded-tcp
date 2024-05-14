@@ -31,7 +31,14 @@ def server_receive_handler(address: tuple, connection: socket.socket, data: byte
 
 # Defining disconnection behavior
 @server.disconnection_handler
-def server_disconnection_handler(address: tuple):
+def server_disconnection_handler(address: tuple, reason: Exception):
+    # Note
+    #
+    # Parameter `reason` is new in version 1.3 and means the reason of disconnection
+    # This is an Exception that was caught during the handler function execution
+    # Also it can be ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError,
+    # ConnectionError, OSError
+    # Parameter `reason` is None when connection was successful (client requested for connection closure)
     print(f'Disconnected by {":".join(map(str, address))}')
 
 # Defining universal behavior
@@ -68,7 +75,8 @@ def client_response_handler(address: tuple, connection: socket.socket, data: byt
 
 # Defining disconnection with server behavior 
 @client.disconnection_handler
-def client_disconnection_handler(address: tuple):
+def client_disconnection_handler(address: tuple, reason: Exception):
+    # Reason parameter is the same as in `server_disconnection_handler`
     print(f'Disconnected from {":".join(map(str, address))}')
 
 # Defining exceptions handling behavior
@@ -90,6 +98,13 @@ client.start() # Launching client (execution started in parallel thread)
 server.keep_alive()
 # server.keep_alive() is only needed to keep thread alive until KeyboardInterrupt will not be raised
 # This is optional in cases of you have something like "while True" statement
+
+"""
+Also there are methods like `server.close()` and `client.close()` but they only needed to close a connection.
+
+server.close() awaits for all connections to stop and stops the server
+client.close() disconnects the server with the reason of `sttcp.client.Client.DestructionException`
+"""
 ```
 
 ## What's new?
@@ -110,6 +125,13 @@ server.keep_alive()
 - Added new method `sttcp.server.Server.disconnection_handler`
 - Added new method `sttcp.server.Server.universal_handler`
 - Renamed method `sttcp.server.Server.mainloop` to `sttcp.server.Server.keep_alive`
+- Added new methods `sttcp.client.Client.start` and `sttcp.server.Server.start`
+
+### Version 1.3
+- Added new methods `sttcp.client.Client.stop` and `sttcp.server.Server.stop`
+- Now server handler exceptions don't make server unstoppable by KeyboardInterrupt
+- Added new parameter to `disconnection_handler` for both sides - disconnection reason (Union[None, Exception]) 
+- Added new exception `sttcp.client.Client.DestructionException`
 
 ## Contacts
 Discord: `@emilahmaboy`

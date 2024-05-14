@@ -1,7 +1,6 @@
 [project]
 name = "simple_threaded_tcp"
 version = "1.2"
-requires = []
 authors = [
     {name = "Emil", email = "emilahmaboy@gmail.com"}
 ]
