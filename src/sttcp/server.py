@@ -5,11 +5,11 @@ import warnings
 import time
 from enum import Enum
 from typing import Union
-from . import screen_lock
+from . import screen_lock, connections, print_sync
 
 
 def _default_connection(addr: tuple, connection: socket.socket) -> Union[bool, None]:
-    print(f'Connected by {":".join(map(str, addr))}')
+    print_sync(f'Connected by {":".join(map(str, addr))}')
     return None
 
 
@@ -18,7 +18,7 @@ def _default_receive(addr: tuple, connection: socket.socket, data: bytes):
 
 
 def _default_disconnection(addr: tuple, disconnection_reason: Exception):
-    print(f'Disconnected by {":".join(map(str, addr))}')
+    print_sync(f'Disconnected by {":".join(map(str, addr))}')
 
 
 def _default_universal(handler_type, addr: tuple, connection: Union[socket.socket, None], data: Union[bytes, None]):
@@ -45,6 +45,8 @@ class Server:
         self.host = host
         self.port = port
         self.address = str(self.host) + ':' + str(self.port)
+        self.sock_name = (self.host, self.port)
+
         self.is_listening = False
 
         def conn_handler(addr, conn: socket.socket):
@@ -59,7 +61,6 @@ class Server:
                     if not data:
                         break
 
-                    screen_lock.acquire()
                     try:
                         self._universal_handler(self.HandlerType.receive, addr, conn, data)
                         self._receive_handler(addr, conn, data)
@@ -70,47 +71,45 @@ class Server:
                         disconnection_reason = e
                         break
                     except Exception as e:
-                        print('\033[91mOh no! Something went wrong in your handler! Check it out and find '
-                              'problems:\033[0m')
-                        print(traceback.format_exc())
-                        print('\033[91mDisconnecting the client\033[0m')
+                        message = ('\033[91mOh no! Something went wrong in your handler! Check it out and find '
+                                   'problems:\033[0m')
+                        message += '\n' + traceback.format_exc()
+                        message += '\n' + '\033[91mDisconnecting the client\033[0m'
+                        print_sync(message)
                         disconnection_reason = e
                         conn.close()
                         break
-                    screen_lock.release()
 
-                screen_lock.acquire()
                 try:
                     self._universal_handler(self.HandlerType.disconnection, addr, None, None)
                     self._disconnection_handler(addr, disconnection_reason)
                 except Exception:
-                    print('\033[91mOh no! Something went wrong in your handler! Check it out and find '
-                          'problems:\033[0m')
-                    print(traceback.format_exc())
-                screen_lock.release()
+                    message = ('\033[91mOh no! Something went wrong in your handler! Check it out and find '
+                               'problems:\033[0m')
+                    message += '\n' + traceback.format_exc()
+                    print_sync(message)
 
         def server():
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s = self._socket
-            s.bind((self.host, self.port))
+            s.bind(self.sock_name)
+            self.sock_name = s.getsockname()
             s.listen()
-            screen_lock.acquire()
-            print(f'Listening to {":".join(map(str, s.getsockname()))}')
-            screen_lock.release()
+
+            print_sync(f'Listening to {":".join(map(str, s.getsockname()))}')
+
             self.is_listening = True
             while not self._socket_thread.shutdown:
                 try:
                     conn, addr = s.accept()
                     if addr != self._socket_thread.shutdown_socket:
-                        screen_lock.acquire()
+
                         try:
                             connect_alt = self._universal_handler(self.HandlerType.connection, addr, None, None)
                             connect = self._connection_handler(addr, conn)
                         except (ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError,
                                 ConnectionError, OSError):
                             continue
-
-                        screen_lock.release()
 
                         if connect is None:
                             connect = connect_alt or True
@@ -122,11 +121,12 @@ class Server:
                             conn.close()
                 except OSError:
                     break
-            screen_lock.acquire()
-            print(f'Closed {":".join(map(str, s.getsockname()))}')
-            screen_lock.release()
+
+            print_sync(f'Stopped server {":".join(map(str, self.sock_name))}')
+
             s.close()
             self.closed = True
+            connections.remove(self)
 
         self._socket_thread = threading.Thread(target=server, daemon=True)
         self._socket_thread.shutdown = False
@@ -136,6 +136,7 @@ class Server:
     def start(self):
         """Starts TCP server"""
         self._socket_thread.start()
+        connections.append(self)
 
     def close(self):
         """Closes TCP server"""
@@ -195,16 +196,16 @@ class Server:
         try:
             while not self.is_listening:
                 pass
-            screen_lock.acquire()
-            print('Press Ctrl + C to stop server!')
-            screen_lock.release()
+
+            print_sync('Press Ctrl + C to stop server!')
+
             while self._socket_thread.is_alive():
                 self._socket_thread.join(0.1)
         except KeyboardInterrupt:
             if hasattr(self, '_socket'):
-                screen_lock.acquire()
-                print('Stopping server...')
-                screen_lock.release()
+
+                print_sync('Stopping server...')
+
                 self.close()
                 while not self.closed:
                     time.sleep(0.1)

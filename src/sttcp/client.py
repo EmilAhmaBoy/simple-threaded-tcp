@@ -2,9 +2,10 @@ import socket
 import threading
 import traceback
 import warnings
+import time
 from enum import Enum
 from typing import Union
-from . import screen_lock
+from . import screen_lock, connections, print_sync
 
 
 def _default_connection(addr: tuple, connection: socket.socket) -> Union[bool, None]:
@@ -13,7 +14,7 @@ def _default_connection(addr: tuple, connection: socket.socket) -> Union[bool, N
 
 
 def _default_response(addr: tuple, connection: socket.socket, data: bytes):
-    print(f'Received "{data.decode("utf-8")}"')
+    print_sync(f'Received "{data.decode("utf-8")}"')
     return False
 
 
@@ -27,7 +28,7 @@ def _default_universal(handler_type, addr: Union[tuple, None], connection: Union
 
 
 def _default_unconnected(addr: tuple, e: Exception):
-    print(f'Couldn\'t connect to {":".join(map(str, addr))}')
+    print_sync(f'Couldn\'t connect to {":".join(map(str, addr))}')
     raise e
 
 
@@ -56,18 +57,22 @@ class Client:
         self.host = host
         self.port = port
         self.address = str(self.host) + ':' + str(self.port)
+        self.sock_name = (self.host, self.port)
+
+        self.is_connected = False
 
         def client():
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s = self._socket
             try:
-                s.connect((self.host, self.port))
+                s.connect(self.sock_name)
+                self.is_connected = True
+                self.sock_name = s.getsockname()
                 addr = s.getpeername()
 
                 disconnection_reason = None
                 data = None
                 while True:
-                    screen_lock.acquire()
                     if data is None:
                         continue_request_alt = self._universal_handler(self.HandlerType.connection, addr, s, None)
                         continue_request = self._connection_handler(addr, s)
@@ -81,10 +86,11 @@ class Client:
                                 disconnection_reason = e
                                 break
                             except Exception as e:
-                                print('\033[91mOh no! Something went wrong in your handler! Check it out and find '
-                                      'problems:\033[0m')
-                                print(traceback.format_exc())
-                                print('\033[91mDisconnecting the client\033[0m')
+                                message = ('\033[91mOh no! Something went wrong in your handler! Check it out and find '
+                                           'problems:\033[0m')
+                                message += '\n' + traceback.format_exc()
+                                message += '\n' + '\033[91mDisconnecting the client\033[0m'
+                                print_sync(message)
                                 disconnection_reason = e
                                 s.close()
                                 break
@@ -95,8 +101,6 @@ class Client:
 
                     if self.handler is not None:
                         self.handler(addr, s, data)
-
-                    screen_lock.release()
 
                     if continue_request is None:
                         continue_request = continue_request_alt or True
@@ -112,24 +116,29 @@ class Client:
 
                     if not data:
                         break
-                screen_lock.release()
-                screen_lock.acquire()
+
                 self._universal_handler(self.HandlerType.disconnection, addr, None, None)
                 self._disconnection_handler(addr, disconnection_reason)
-                screen_lock.release()
+
+                print_sync(f'Stopped client {":".join(map(str, self.sock_name))}')
             except (ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError, ConnectionError, OSError) \
                     as e:
-                screen_lock.acquire()
+
                 self._universal_handler(self.HandlerType.unconnected, None, None, None)
                 self._unconnected_handler((self.host, self.port), e)
-                screen_lock.release()
 
-        self._socket_thread = threading.Thread(target=client)
+            s.close()
+            self.closed = True
+            connections.remove(self)
+
+        self._socket_thread = threading.Thread(target=client, daemon=True)
         self._socket_thread.shutdown = False
+        self.closed = False
 
     def start(self):
         """Starts TCP client"""
         self._socket_thread.start()
+        connections.append(self)
 
     def close(self):
         """Closes TCP client"""
@@ -184,3 +193,22 @@ class Client:
         """
         self.handler = function
         warnings.warn('This method is deprecated', DeprecationWarning)
+
+    def keep_alive(self):
+        """Use it to make client stoppable only by KeyboardInterrupt exception."""
+        try:
+            while not self.is_connected:
+                pass
+
+            print_sync('Press Ctrl + C to stop client!')
+
+            while self._socket_thread.is_alive():
+                self._socket_thread.join(0.1)
+        except KeyboardInterrupt:
+            if hasattr(self, '_socket'):
+
+                print_sync('Stopping client...')
+
+                self.close()
+                while not self.closed:
+                    time.sleep(0.1)
