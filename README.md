@@ -104,6 +104,7 @@ Also there are methods like `server.close()` and `client.close()` but they only 
 
 server.close() awaits for all connections to stop and stops the server
 client.close() disconnects the server with the reason of `sttcp.client.Client.DestructionException`
+server.stop() and client.stop() are alternatives to server.close() and client.close()
 """
 ```
 
@@ -128,10 +129,14 @@ client.close() disconnects the server with the reason of `sttcp.client.Client.De
 - Added new methods `sttcp.client.Client.start` and `sttcp.server.Server.start`
 
 ### Version 1.3
-- Added new methods `sttcp.client.Client.stop` and `sttcp.server.Server.stop`
+- Added new methods `sttcp.client.Client.close` and `sttcp.server.Server.close`
 - Now server handler exceptions don't make server unstoppable by KeyboardInterrupt
 - Added new parameter to `disconnection_handler` for both sides - disconnection reason (Union[None, Exception]) 
 - Added new exception `sttcp.client.Client.DestructionException`
+
+### Version 1.4
+- Added new methods `sttcp.client.Client.stop` and `sttcp.server.Server.stop` as alternatives to `.close`
+- Fixed a 100% CPU bug 
 
 ## Contacts
 Discord: `@emilahmaboy`

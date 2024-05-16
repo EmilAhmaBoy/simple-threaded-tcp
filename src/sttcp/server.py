@@ -2,6 +2,7 @@ import socket
 import threading
 import traceback
 import warnings
+import time
 from enum import Enum
 from typing import Union
 from . import screen_lock
@@ -146,6 +147,10 @@ class Server:
         except (ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError, ConnectionError, OSError) as e:
             raise e
 
+    def stop(self):
+        """Alternative of .close()"""
+        self.close()
+
     def set_handler(self, function):
         """
         Sets a handler for TCP server. Handler format:
@@ -193,8 +198,8 @@ class Server:
             screen_lock.acquire()
             print('Press Ctrl + C to stop server!')
             screen_lock.release()
-            while not self.closed:
-                pass
+            while self._socket_thread.is_alive():
+                self._socket_thread.join(0.1)
         except KeyboardInterrupt:
             if hasattr(self, '_socket'):
                 screen_lock.acquire()
@@ -202,8 +207,8 @@ class Server:
                 screen_lock.release()
                 self.close()
                 while not self.closed:
-                    pass
+                    time.sleep(0.1)
 
     def mainloop(self):
-        warnings.warn('This method is renamed to keep_alive', DeprecationWarning)
+        warnings.warn('This method was renamed to keep_alive', DeprecationWarning)
         self.keep_alive()

@@ -1,4 +1,5 @@
 import socket
+import threading
 import time
 
 from src.sttcp.server import Server
@@ -76,6 +77,5 @@ def client_universal_handler(handler_type: Server.HandlerType, address: tuple, c
 
 client.start()
 
-client.close()
 
 server.keep_alive()

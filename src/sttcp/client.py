@@ -135,6 +135,10 @@ class Client:
         """Closes TCP client"""
         self._socket_thread.shutdown = True
 
+    def stop(self):
+        """Alternative of .close()"""
+        self.close()
+
     def connection_handler(self, function) -> None:
         """
         Sets a connection handler for TCP client.
