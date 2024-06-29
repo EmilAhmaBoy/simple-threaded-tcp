@@ -5,7 +5,10 @@ import warnings
 import time
 from enum import Enum
 from typing import Union
-from . import screen_lock, connections, print_sync
+try:
+    from . import connections, print_sync
+except ImportError:
+    from sttcp import connections, print_sync
 
 
 def _default_connection(addr: tuple, connection: socket.socket) -> Union[bool, None]:

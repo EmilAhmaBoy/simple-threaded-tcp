@@ -147,6 +147,8 @@ server.stop() and client.stop() are alternatives to server.close() and client.cl
 - Now client needs to be `keep_alive`d using `sttcp.client.Client.keep_alive`.
 - Added new function `sttcp.general.keep_alive` to `keep_alive` **everything**.
 - Added new function `sttcp.print_sync`
+#### Version 1.5.1
+- Bug fix related to ImportError
 
 ## Contacts
 Discord: `@emilahmaboy`

@@ -1,9 +1,14 @@
 import threading
 
-from ..sttcp import connections, screen_lock, print_sync
-from .client import Client
-from .server import Server
-import time
+try:
+    from ..sttcp import connections, print_sync
+    from .client import Client
+    from .server import Server
+    import time
+except ImportError:
+    from sttcp import connections, print_sync
+    from sttcp.client import Client
+    from sttcp.server import Server
 
 
 def keep_alive():
